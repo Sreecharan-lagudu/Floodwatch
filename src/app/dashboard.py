@@ -58,8 +58,9 @@ c1.metric("🔴 Alert streets", len(alerts))
 c2.metric("🟠 Watch streets", len(watch))
 c3.metric("🟢 Low risk", len(scored) - len(alerts) - len(watch))
 
+# OpenStreetMap tiles: free, no API key required
 m = folium.Map(location=[city["meta"]["lat0"] + 0.02, city["meta"]["lon0"] + 0.03],
-               zoom_start=13, tiles="CartoDB positron")
+               zoom_start=13, tiles="OpenStreetMap")
 for s in scored:
     folium.PolyLine(
         [s["a"], s["b"]],
