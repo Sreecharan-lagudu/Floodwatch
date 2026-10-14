@@ -1,0 +1,8 @@
+pandas>=2.0
+numpy>=1.24
+streamlit>=1.30
+folium>=0.15
+streamlit-folium>=0.20
+rasterio>=1.3        # real-data mode only
+osmnx>=1.8          # real-data mode only
+scikit-learn>=1.3    # calibration stretch goal

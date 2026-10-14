@@ -1,0 +1,10 @@
+__pycache__/
+*.pyc
+.venv/
+venv/
+.ipynb_checkpoints/
+data/raw/*
+data/processed/*
+!data/processed/.gitkeep
+.streamlit/secrets.toml
+.DS_Store
