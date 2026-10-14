@@ -12,8 +12,10 @@ import folium
 from folium.plugins import Fullscreen
 from streamlit_folium import st_folium
 import numpy as np
+import pandas as pd
 
 from src.model.risk_engine import score_streets, DEFAULT_WEIGHTS
+from src.model.validate import validate, threshold_sweep, roc_auc
 from src.app.alerts import generate_alerts, render_sms
 
 st.set_page_config(page_title="FloodWatch — India", layout="wide")
@@ -73,12 +75,9 @@ with top2:
         st.warning(f"No demo city matches '{query}'. Showing Chennai.")
         matches = [c for c in catalog if c["key"] == "chennai"]
     options = [c["key"] for c in (matches or catalog)]
-    # dropdown with readable names: "Chennai · Tamil Nadu (coastal)"
     chosen = st.selectbox(
         "City" if query else "Quick pick — all 16 cities",
-        options,
-        index=0,
-        format_func=lambda k: labels[k])
+        options, index=0, format_func=lambda k: labels[k])
 
 city = cities[chosen]
 feat = load_features(city)
@@ -86,11 +85,11 @@ streets = city["streets"]
 rainfall = city["rainfall"]
 id_to_idx = {s["id"]: i for i, s in enumerate(streets)}
 meta = city["meta"]
+truth = set(city["ground_truth"])
 
 with st.sidebar:
     st.header("Nowcast replay")
     hours = [h["hour"] for h in rainfall]
-    # ✨ default to the PEAK of the storm so the demo starts dramatic
     default_hour = max(hours, key=lambda h: next(r["rain_mm_per_h"] for r in rainfall if r["hour"] == h))
     hour = st.select_slider("Forecast hour", hours, value=default_hour)
     rain_now = next(h["rain_mm_per_h"] for h in rainfall if h["hour"] == hour)
@@ -110,7 +109,7 @@ with st.sidebar:
            ])}
     total = sum(raw.values()) or 1.0
     weights = {k: v / total for k, v in raw.items()}
-    st.caption(f"Effective weights: " + ", ".join(f"{k}={v:.2f}" for k, v in weights.items()))
+    st.caption("Effective: " + ", ".join(f"{k}={v:.2f}" for k, v in weights.items()))
 
     st.divider()
     tile_choice = st.radio("Basemap", ["Street", "Satellite"], horizontal=True)
@@ -158,10 +157,38 @@ if clicked:
     dc2.metric("Band", near["band"])
     dc3.metric("Elevation score", f"{float(feat['elevation'][id_to_idx[near['id']]]):.2f}")
     dc4.metric("Drainage score", f"{float(feat['drainage'][id_to_idx[near['id']]]):.2f}")
-    st.caption(f"Move the Forecast-hour slider to see how this location's risk evolves through the storm.")
+    st.caption("Move the Forecast-hour slider to see how this location's risk evolves through the storm.")
 
 st.subheader("Mock SMS / push alerts")
 st.code(render_sms(generate_alerts(scored)), language="text")
+
+# ---------------- validation panel ----------------
+st.subheader("Model validation (vs flood ground truth)")
+
+v = validate(scored, truth, threshold=70)
+auc = roc_auc(scored, truth)
+sweep = threshold_sweep(scored, truth)
+
+m1, m2, m3, m4 = st.columns(4)
+m1.metric("Precision (alert band)", f"{v['precision']:.2f}",
+          help="Of streets flagged alert, fraction that truly flood")
+m2.metric("Recall (alert band)", f"{v['recall']:.2f}",
+          help="Of truly flooded streets, fraction caught by alerts")
+m3.metric("F1", f"{v['f1']:.2f}")
+m4.metric("ROC-AUC", f"{auc:.2f}",
+          help="How well the risk score separates flooded from dry streets (1.0 = perfect ranking)")
+
+st.caption(f"Best-F1 alert threshold for this city: **{sweep['best_threshold']}** "
+           f"(F1 = {sweep['best_f1']:.2f}) — sweep 30→90 in steps of 2.")
+
+sw_df = pd.DataFrame(sweep["rows"])
+p1, p2 = st.columns([3, 2])
+with p1:
+    st.line_chart(sw_df.set_index("threshold")[["precision", "recall", "f1"]],
+                  height=280, x_label="Alert threshold", y_label="score")
+with p2:
+    st.dataframe(sw_df[(sw_df.threshold % 10 == 0)].set_index("threshold"),
+                use_container_width=True)
 
 st.subheader("Risk table (top 10)")
 top = sorted(scored, key=lambda s: -s["risk"])[:10]
