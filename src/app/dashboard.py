@@ -9,7 +9,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspa
 
 import streamlit as st
 import folium
-from folium.plugins import MiniMap, Fullscreen
+from folium.plugins import Fullscreen
 from streamlit_folium import st_folium
 import numpy as np
 
@@ -50,7 +50,6 @@ def load_features(city):
 
 cities = load_all()
 
-# ---------- city catalog with search metadata ----------
 catalog = []
 for key, c in cities.items():
     m = c["meta"]
@@ -62,7 +61,6 @@ for key, c in cities.items():
     ))
 labels = {c["key"]: c["label"] for c in catalog}
 
-# ---------- top bar: search + quick picker ----------
 top1, top2 = st.columns([2, 1])
 with top1:
     query = st.text_input(
@@ -94,27 +92,36 @@ rainfall = city["rainfall"]
 id_to_idx = {s["id"]: i for i, s in enumerate(streets)}
 meta = city["meta"]
 
-# ---------- sidebar: replay + weights ----------
 with st.sidebar:
     st.header("Nowcast replay")
     hours = [h["hour"] for h in rainfall]
-    hour = st.select_slider("Forecast hour", hours, value=hours[0])
+    # ✨ default to the PEAK of the storm so the demo starts dramatic
+    default_hour = max(hours, key=lambda h: next(r["rain_mm_per_h"] for r in rainfall if r["hour"] == h))
+    hour = st.select_slider("Forecast hour", hours, value=default_hour)
     rain_now = next(h["rain_mm_per_h"] for h in rainfall if h["hour"] == hour)
     st.metric("Predicted rainfall", f"{rain_now:.0f} mm/h")
+    st.progress(min(float(rain_now) / 100.0, 1.0), text=f"Storm intensity")
+
     st.divider()
     st.header("Risk-model weights")
-    w_rain = st.slider("w1 rainfall", 0.0, 1.0, DEFAULT_WEIGHTS["rainfall"], 0.05)
-    w_elev = st.slider("w2 elevation", 0.0, 1.0, DEFAULT_WEIGHTS["elevation"], 0.05)
-    w_flow = st.slider("w3 flow accumulation", 0.0, 1.0, DEFAULT_WEIGHTS["flow_acc"], 0.05)
-    w_drain = st.slider("w4 drainage deficit", 0.0, 1.0, DEFAULT_WEIGHTS["drainage"], 0.05)
-    w_hist = st.slider("w5 flood history", 0.0, 1.0, DEFAULT_WEIGHTS["history"], 0.05)
+    st.caption("Sum normalized to 1 automatically")
+    raw = {k: st.slider(f"w{i+1} {n}", 0.0, 1.0, float(v), 0.05)
+           for i, (k, n, v) in enumerate([
+               ("rainfall", "rainfall", DEFAULT_WEIGHTS["rainfall"]),
+               ("elevation", "elevation", DEFAULT_WEIGHTS["elevation"]),
+               ("flow_acc", "flow accumulation", DEFAULT_WEIGHTS["flow_acc"]),
+               ("drainage", "drainage deficit", DEFAULT_WEIGHTS["drainage"]),
+               ("history", "flood history", DEFAULT_WEIGHTS["history"]),
+           ])}
+    total = sum(raw.values()) or 1.0
+    weights = {k: v / total for k, v in raw.items()}
+    st.caption(f"Effective weights: " + ", ".join(f"{k}={v:.2f}" for k, v in weights.items()))
+
     st.divider()
     tile_choice = st.radio("Basemap", ["Street", "Satellite"], horizontal=True)
 
 st.subheader(f"{meta['name']}, {meta['state']} — {meta['terrain'].capitalize()} terrain")
 
-weights = dict(rainfall=w_rain, elevation=w_elev, flow_acc=w_flow,
-               drainage=w_drain, history=w_hist)
 scored = score_streets(streets, feat, rain_now, weights)
 
 c1, c2, c3 = st.columns(3)
@@ -124,7 +131,6 @@ c1.metric("🔴 Alert streets", len(alerts))
 c2.metric("🟠 Watch streets", len(watch))
 c3.metric("🟢 Low risk", len(scored) - len(alerts) - len(watch))
 
-# ---------- map ----------
 tiles = ESRI_SAT if tile_choice == "Satellite" else ESRI_TILES
 m = folium.Map(location=[meta["lat0"] + 0.02, meta["lon0"] + 0.03],
                zoom_start=13, tiles=tiles, attr="Esri")
@@ -141,15 +147,15 @@ for s in scored:
 
 st_data = st_folium(m, height=520, use_container_width=True, returned_objects=["last_object_clicked"])
 
-# ---------- click on any street (or elsewhere) → detail card ----------
 clicked = st_data.get("last_object_clicked") if st_data else None
 if clicked:
     lat, lon = clicked["lat"], clicked["lng"]
-    # nearest street segment to the click point
+
     def dist_km(s):
         dy = (s["mid"][0] - lat) * 111.0
         dx = (s["mid"][1] - lon) * 111.0 * np.cos(np.radians(lat))
         return dy * dy + dx * dx
+
     near = min(scored, key=dist_km)
     st.success(f"📍 Selected location: **{lat:.5f}, {lon:.5f}** — nearest segment **{near['id']}**")
     dc1, dc2, dc3, dc4 = st.columns(4)
@@ -159,7 +165,6 @@ if clicked:
     dc4.metric("Drainage score", f"{float(feat['drainage'][id_to_idx[near['id']]]):.2f}")
     st.caption(f"Move the Forecast-hour slider to see how this location's risk evolves through the storm.")
 
-# ---------- alerts + table ----------
 st.subheader("Mock SMS / push alerts")
 st.code(render_sms(generate_alerts(scored)), language="text")
 
