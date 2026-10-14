@@ -58,9 +58,11 @@ c1.metric("🔴 Alert streets", len(alerts))
 c2.metric("🟠 Watch streets", len(watch))
 c3.metric("🟢 Low risk", len(scored) - len(alerts) - len(watch))
 
-# OpenStreetMap tiles: free, no API key required
+# Esri World Street Map tiles: free, no API key, and allows cloud/CI traffic
+# (OpenStreetMap tile servers block Codespaces/cloud IPs by usage policy).
+ESRI_TILES = "https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}"
 m = folium.Map(location=[city["meta"]["lat0"] + 0.02, city["meta"]["lon0"] + 0.03],
-               zoom_start=13, tiles="OpenStreetMap")
+               zoom_start=13, tiles=ESRI_TILES, attr="Esri")
 for s in scored:
     folium.PolyLine(
         [s["a"], s["b"]],
