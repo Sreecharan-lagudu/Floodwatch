@@ -33,6 +33,7 @@ city = load_city()
 feat = load_features(city)
 streets = city["streets"]
 rainfall = city["rainfall"]
+id_to_idx = {s["id"]: i for i, s in enumerate(streets)}
 
 with st.sidebar:
     st.header("Nowcast replay")
@@ -74,8 +75,8 @@ st.subheader("Risk table (top 10)")
 top = sorted(scored, key=lambda s: -s["risk"])[:10]
 st.dataframe(
     [{"street": s["id"], "risk": s["risk"], "band": s["band"],
-      "elev_score": round(float(feat["elevation"][streets.index(s)]), 2),
-      "drain_score": round(float(feat["drainage"][streets.index(s)]), 2),
+      "elev_score": round(float(feat["elevation"][id_to_idx[s["id"]]]), 2),
+      "drain_score": round(float(feat["drainage"][id_to_idx[s["id"]]]), 2),
       "mid": ", ".join(f"{c:.4f}" for c in s["mid"])} for s in top],
     use_container_width=True,
 )
