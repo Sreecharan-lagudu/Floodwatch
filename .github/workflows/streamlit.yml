@@ -1,0 +1,38 @@
+name: Streamlit app CI
+
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+    branches: ["main"]
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+      - name: Run pipeline end-to-end (all 16 demo cities)
+        run: python run_demo.py
+      - name: Check dashboard imports cleanly
+        run: |
+          python - <<'EOF'
+          import importlib.util, sys
+          spec = importlib.util.spec_from_file_location("dash", "src/app/dashboard.py")
+          # streamlit app script: just verify it compiles (streamlit needed at import)
+          import streamlit as st
+          source = open("src/app/dashboard.py").read()
+          compile(source, "dashboard.py", "exec")
+          print("dashboard.py compiles OK")
+          EOF
+      - name: Show per-city validation metrics
+        run: cat data/processed/metrics.json

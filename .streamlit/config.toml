@@ -1,0 +1,7 @@
+[app]
+headline = "FloodWatch — Street-Level Flood Alerts for Indian Cities"
+description = "Rainfall nowcast + terrain + drainage proxies → explainable street-level flood-risk scores across 16 Indian cities. Smart India Hackathon 2026 (SIH26085) squad build."
+authors = ["Sree Charan Lagudu"]
+url = "https://github.com/Sreecharan-lagudu"
+keywords = ["flood", "streamlit", "geospatial", "risk", "india", "hackathon"]
+maxUploadSize = 200
