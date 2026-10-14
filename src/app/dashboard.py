@@ -15,27 +15,52 @@ import numpy as np
 from src.model.risk_engine import score_streets, DEFAULT_WEIGHTS
 from src.app.alerts import generate_alerts, render_sms
 
-st.set_page_config(page_title="FloodWatch — Chennai", layout="wide")
+st.set_page_config(page_title="FloodWatch — India", layout="wide")
 st.title("🌊 FloodWatch — street-level flood alerts")
 st.caption("SIH26085 squad demo · rainfall + terrain + drainage proxies → per-street risk")
 
+CITIES_FILE = "data/processed/cities.json"
+LEGACY_FILE = "data/processed/demo_city.json"
+
+
 @st.cache_data
-def load_city():
-    with open("data/processed/demo_city.json") as f:
+def load_all():
+    if os.path.exists(CITIES_FILE):
+        with open(CITIES_FILE) as f:
+            return json.load(f)
+    if os.path.exists(LEGACY_FILE):
+        with open(LEGACY_FILE) as f:
+            single = json.load(f)
+        single["meta"]["state"] = "Tamil Nadu"
+        return {"chennai": single}
+    from data.synthetic.generate_cities import main as gen
+    gen()
+    with open(CITIES_FILE) as f:
         return json.load(f)
+
 
 @st.cache_data
 def load_features(city):
     from src.pipeline import build_static_features
     return build_static_features(city)
 
-city = load_city()
-feat = load_features(city)
-streets = city["streets"]
-rainfall = city["rainfall"]
-id_to_idx = {s["id"]: i for i, s in enumerate(streets)}
+
+cities = load_all()
 
 with st.sidebar:
+    st.header("City")
+    city_keys = list(cities.keys())
+    labels = {k: f"{cities[k]['meta']['name']} · {cities[k]['meta']['state']}" for k in city_keys}
+    chosen = st.select_slider("Select city (across Indian states)",
+                              options=city_keys,
+                              format_func=lambda k: labels[k],
+                              value="chennai" if "chennai" in city_keys else city_keys[0])
+    city = cities[chosen]
+    feat = load_features(city)
+    streets = city["streets"]
+    rainfall = city["rainfall"]
+    id_to_idx = {s["id"]: i for i, s in enumerate(streets)}
+
     st.header("Nowcast replay")
     hours = [h["hour"] for h in rainfall]
     hour = st.select_slider("Forecast hour", hours, value=hours[0])
@@ -46,6 +71,8 @@ with st.sidebar:
     w_flow = st.slider("w3 flow accumulation", 0.0, 1.0, DEFAULT_WEIGHTS["flow_acc"], 0.05)
     w_drain = st.slider("w4 drainage deficit", 0.0, 1.0, DEFAULT_WEIGHTS["drainage"], 0.05)
     w_hist = st.slider("w5 flood history", 0.0, 1.0, DEFAULT_WEIGHTS["history"], 0.05)
+
+st.subheader(f"{city['meta']['name']}, {city['meta']['state']}")
 
 weights = dict(rainfall=w_rain, elevation=w_elev, flow_acc=w_flow,
                drainage=w_drain, history=w_hist)
@@ -84,5 +111,5 @@ st.dataframe(
     use_container_width=True,
 )
 st.caption("Drainage is a proxy (distance to waterway + built-up share) — municipal "
-           "network data is not public. Demo city is synthetic; real mode ingests "
+           "network data is not public. Demo cities are synthetic; real mode ingests "
            "IMD rainfall, CartoDEM and OSM.")

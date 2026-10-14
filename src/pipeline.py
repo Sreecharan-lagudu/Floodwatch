@@ -12,10 +12,8 @@ def build_static_features(city: dict) -> dict:
     acc = terrain_f.flow_accumulation(elev_grid)
     acc_score_grid = terrain_f.flow_accumulation_score(acc)
 
-    # map each street to the raster cell of its midpoint
     meta = city["meta"]
     n_rows, n_cols = elev_grid.shape
-    lat0, lon0 = meta["lat0"], meta["lon0"]
     segs = city["streets"]
     lats = [s["mid"][0] for s in segs]
     lons = [s["mid"][1] for s in segs]
@@ -26,7 +24,9 @@ def build_static_features(city: dict) -> dict:
     cols = [int((lo - min(lons)) / lon_span * (n_cols - 1)) for lo in lons]
 
     from src.features.drainage_proxy import drainage_deficit_score
-    river_lon = float(np.mean(lons))  # synthetic river runs through the middle
+    # estimate river longitude from the raster: lowest-elevation column
+    river_col = int(np.argmin(elev_grid.mean(axis=0)))
+    river_lon = min(lons) + (river_col / (n_cols - 1)) * lon_span
     drainage = drainage_deficit_score(segs, river_lon)
 
     truth = set(city.get("ground_truth", []))
