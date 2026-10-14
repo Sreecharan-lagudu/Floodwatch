@@ -69,21 +69,16 @@ with top1:
     ).strip().lower()
 with top2:
     matches = [c for c in catalog if query in c["search"]] if query else []
-    if query:
-        if not matches:
-            st.warning(f"No demo city matches '{query}'. Showing Chennai.")
-            matches = [c for c in catalog if c["key"] == "chennai"]
-        options = [c["key"] for c in matches]
-        chosen = st.select_slider(
-            f"{len(matches)} match(es) — pick one",
-            options=options, value=options[0],
-            format_func=lambda k: labels[k])
-    else:
-        chosen = st.select_slider(
-            "Quick pick",
-            options=[c["key"] for c in catalog],
-            value="chennai" if "chennai" in cities else list(cities.keys())[0],
-            format_func=lambda k: labels[k])
+    if query and not matches:
+        st.warning(f"No demo city matches '{query}'. Showing Chennai.")
+        matches = [c for c in catalog if c["key"] == "chennai"]
+    options = [c["key"] for c in (matches or catalog)]
+    # dropdown with readable names: "Chennai · Tamil Nadu (coastal)"
+    chosen = st.selectbox(
+        "City" if query else "Quick pick — all 16 cities",
+        options,
+        index=0,
+        format_func=lambda k: labels[k])
 
 city = cities[chosen]
 feat = load_features(city)
